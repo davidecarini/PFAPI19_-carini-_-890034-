@@ -1,0 +1,9 @@
+char* c= malloc(1);
+int character;
+int i = 0;
+while ((character = getchar()) != '\n' && character != EOF)
+{
+	c[i++] = character;
+	c= realloc(c, i + 1);  
+}
+c[i] = '\0';
