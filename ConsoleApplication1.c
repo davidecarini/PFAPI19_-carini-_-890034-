@@ -1,401 +1,678 @@
-#include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-enum { RED, BLACK };
-typedef int COLOR;
+#define ARRAYLENGHT 5
 
-typedef struct Relation_Summary {
-	char relation[25];
-	int count;
-	struct Relation_Summary* next;
-}*relationSummary;
 
-typedef struct Relation_List {
-	relationSummary summaryPointer;
-	struct Relation_List* next;
-}*relationlist;
-
-typedef struct Relation_Node {
-	void* entityPointer;
-	COLOR color;
-	struct Relation_Node* right, * left, * parent;
-	relationlist relationList;
-}*relationnode;
-
-typedef struct Entity_Node {
-	char* key;
-	COLOR color;
-	struct Entity_Node* right, * left, * parent;
-	relationnode root;
-	relationSummary summary;
-}*entitynode;
-
-struct Report_Summary {
-	relationSummary summaryPointer;
-	char entityName[100][50];
-};
-
-entitynode NILL, ROOT;
-relationnode NILLR;
+// --------------------------------------------------------------------------------------- OUTBOUND RELATION
 
 
 
-///////////////////////////////////////RELATION/////////////////////////////////////////////
+typedef struct outbound_relation {
+	void* relation;
+	void* entity;
+	struct outbound_relation* next;
+}*out_rel;
 
-relationnode treeSuccessorRelation(relationnode);
-relationnode treeMinimumRelation(relationnode);
-void rbInsertRelation(relationnode*, entitynode, relationSummary);
-void rbInsertFixUpRelation(relationnode*, relationnode);
-void rbDeleteRelation(relationnode*, char*, relationSummary);
-void rbDeleteFixUpRelation(relationnode*, relationnode);
-void rightRotateRelation(relationnode*, relationnode);
-void leftRotateRelation(relationnode*, relationnode);
-relationnode treeSearchRelation(relationnode, char*);
-relationSummary initNewSummary(char*);
-relationSummary getSummary(relationSummary*, char*);
-void inorderTreeWalkRelation(relationnode);
-void inorderTreeSummary(entitynode,struct Report_Summary[]);
+out_rel newOutboundRelation(void* relation, void* entity) {
+	out_rel n = malloc(sizeof(struct outbound_relation));
+	n->next = NULL;
+	n->entity = entity;
+	n->relation = relation;
+	return n;
+}
 
+void addOutboundRelation(out_rel* head, out_rel val) {
+	val->next = *head;
+	*head = val;
+}
 
-void inorderTreeSummary(entitynode root, struct Report_Summary reportlist[])
-{
-	if (root != NILL)
-	{
-		inorderTreeSummary(root->left, reportlist);
-		relationSummary tmp = root->summary;
-		while (tmp != NULL)
-		{
-			bool b = false;
-			int i = 0;
-			while(reportlist[i].summaryPointer!=NULL)
-			{
-				if (strcmp(tmp->relation, reportlist[i].summaryPointer->relation) == 0)
-				{
-					b = true;
-					if (tmp->count > reportlist[i].summaryPointer->count)
-					{
-						(reportlist[i]).summaryPointer = tmp;
-						for (int j = 0;j < 100;j++)
-						{
-							strcpy(reportlist[i].entityName[j] , "");
-						}
-						strcpy(reportlist[i].entityName[0],root->key);
-						break;
-					}
-					else if (tmp->count == reportlist[i].summaryPointer->count)
-					{
-						(reportlist[i]).summaryPointer = tmp;
-						int j = 0;
-
-						while (strlen(reportlist[i].entityName[j]) > 0)
-						{
-							j++;
-
-						}
-							 					 
-						strcpy(reportlist[i].entityName[j], root->key);
-						break;
-					}
-					else
-					{
-						break;
-					}
-				}
-				i++;
-
-			}
-			if (b==false)
-			{
-				reportlist[i].summaryPointer = tmp;
-				strcpy(reportlist[i].entityName[0],root->key);
-
-
-			}
-			
-			tmp = tmp->next;
-
+void delAllOutboundRelationByRelation(out_rel* head, void* relation) {
+	out_rel* curr = head;
+	while (*curr != NULL) {
+		out_rel ele = *curr;
+		if (ele->relation == relation) {
+			*curr = ele->next;
+			free(ele);
 		}
+		else
+			curr = &(ele->next);
+	}
+}
 
-
-		inorderTreeSummary(root->right,reportlist);
+void delAllOutboundRelationByEntity(out_rel* head, void* entity) {
+	out_rel* curr = head;
+	while (*curr != NULL) {
+		out_rel ele = *curr;
+		if (ele->entity == entity) {
+			*curr = ele->next;
+			free(ele);
+		}
+		else
+			curr = &(ele->next);
 	}
 }
 
 
-relationSummary initNewSummary(char* key) {
-	
-	relationSummary summary = (relationSummary)malloc(sizeof(struct Relation_Summary));
+
+// --------------------------------------------------------------------------------------- RELATION SUMMARY
+
+
+
+typedef struct relation_summary {
+	char* rel;
+	size_t count;
+	struct relation_summary* next;
+}*relationSummaryPtr;
+
+typedef struct relation_element {
+	relationSummaryPtr summaryPointer;
+	struct relation_element* next;
+}*relationElementPtr;
+
+/*
+ *
+ * GENERAL SUMMARY SECTION
+ *
+ */
+
+char* relations[ARRAYLENGHT];
+size_t maxima[ARRAYLENGHT];
+size_t nodeNumber[ARRAYLENGHT];
+size_t relations_len = 0;
+size_t curr = 0;
+bool recalcFlag = false;
+bool hasChangend = false;
+
+size_t isort(size_t size) {
+	if (size == 1)
+		return 0;
+
+	char* new = relations[size - 1];
+	long i = size - 2;
+	while (i >= 0 && strcmp(relations[i], new) > 0) {
+		relations[i + 1] = relations[i];
+		maxima[i + 1] = maxima[i];
+		nodeNumber[i + 1] = nodeNumber[i];
+		i--;
+	}
+	relations[i + 1] = new;
+	return i + 1;
+}
+
+char* addRelation(char* relation) {
+	for (size_t i = 0; i < relations_len; i++) {
+		if (strcmp(relations[i], relation) == 0) {
+			curr = i;
+			return relations[i];
+		}
+	}
+	relations[relations_len] = malloc((strlen(relation) + 1) * sizeof(char));
+	strcpy(relations[relations_len], relation);
+	relations[relations_len][strlen(relation)] = 0;
+	curr = isort(++relations_len);
+
+	maxima[curr] = 0;
+	nodeNumber[curr] = 0;
+	hasChangend = true;
+
+	return relations[curr];
+}
+
+void delNode() {
+	nodeNumber[curr]--;
+	hasChangend = true;
+}
+
+void challengeMaximus(size_t newCandidate) {
+	if (newCandidate == maxima[curr]) {
+		nodeNumber[curr]++;
+		hasChangend = true;
+	}
+	else if (newCandidate > maxima[curr]) {
+		maxima[curr] = newCandidate;
+		nodeNumber[curr] = 1;
+		hasChangend = true;
+	}
+}
+
+void setCurr(char* relation) {
+	for (size_t i = 0; i < relations_len; i++) {
+		if (relations[i] == relation) {
+			curr = i;
+			return;
+		}
+	}
+}
+bool isMax(size_t val) {
+	return maxima[curr] == val;
+}
+size_t getMax(size_t pos) {
+	return maxima[pos];
+}
+
+bool isCurrMaxDepleted() {
+	return nodeNumber[curr] == 0;
+}
+
+void setRecalcFlag(bool flag) {
+	recalcFlag = flag;
+	if (flag)
+		hasChangend = true;
+}
+
+bool getRecalcFlag() {
+	return recalcFlag;
+}
+
+void reset() {
+	for (int i = 0; i < relations_len; i++) {
+		maxima[i] = 0;
+		nodeNumber[i] = 0;
+	}
+	hasChangend = true;
+}
+
+size_t getLen() {
+	return relations_len;
+}
+
+char* getRelationAndSetCurr(int pos) {
+	if (pos < relations_len) {
+		curr = pos;
+		return relations[pos];
+	}
+	return  NULL;
+}
+
+void setHasChanged(bool val) {
+	hasChangend = val;
+}
+bool hasChanged() {
+	return hasChangend;
+}
+
+/*
+ * END OF GENERAL SUMMARY SECTION
+ */
+
+relationSummaryPtr initNewSummary(char* key) {
+	relationSummaryPtr summary = (relationSummaryPtr)malloc(sizeof(struct relation_summary));
 	summary->count = 0;
 	summary->next = NULL;
-	strcpy(summary->relation, key);
+	summary->rel = key;
 	return summary;
 }
 
-relationSummary getSummary(relationSummary* head, char* key) {
-	
-	if (*head == NULL)
-	{
+relationSummaryPtr getSummary(relationSummaryPtr* head, char* key) {
+	if (*head == NULL) {
 		*head = initNewSummary(key);
 		return *head;
-
 	}
 
-	relationSummary tmp = *head, prec=NULL;
+	relationSummaryPtr curr = *head, pos = NULL;
 
-	while (tmp != NULL) {
-		if (strcmp(tmp->relation, key) == 0)
-			return tmp;
+	while (curr != NULL) {
+		if (curr->rel == key)
+			return curr;
 
-		prec = tmp;
-		tmp = tmp->next;
+		if (strcmp(key, curr->rel) > 0)
+			pos = curr;
 
+		curr = curr->next;
 	}
-	
-	prec->next = initNewSummary(key);
-	return prec->next;
+	relationSummaryPtr new = initNewSummary(key);
+
+	if (pos == NULL) {
+		new->next = *head;
+		*head = new;
+	}
+	else {
+		new->next = pos->next;
+		pos->next = new;
+	}
+
+	return new;
 }
 
-relationnode treeSearchRelation(relationnode root, char* key)
-{
-	entitynode n = (entitynode)root->entityPointer;
-	if (root == NILLR || strcmp(key, n->key) == 0)
-		return root;
-	if (strcmp(key, n->key) < 0)
-		return treeSearchRelation(root->left, key);
-	else
-		return treeSearchRelation(root->right, key);
-	return root;
-
-}
-
-void inorderTreeWalkRelation(relationnode root)
-{
-	relationlist node = root->relationList;
-
-	if (root != NILLR)
-	{
-		inorderTreeWalkRelation(root->left);
-		printf("[%s: ", ((entitynode)root->entityPointer)->key);
-		while (node != NULL)
-		{
-			printf("%s", node->summaryPointer->relation);
-			node = node->next;
-			if (node != NULL)
-				printf(", ");
-		}
-		printf("]");
-		inorderTreeWalkRelation(root->right);
+void freeSummary(relationSummaryPtr list) {
+	while (list != NULL) {
+		relationSummaryPtr tmp = list;
+		list = list->next;
+		free(tmp);
 	}
 }
 
-relationnode treeMinimumRelation(relationnode root)
-{
-	while (root->left != NILLR)
-	{
-		root = root->left;
-	}
-	return root;
+
+
+// --------------------------------------------------------------------------------------- RED BLACK TREE
+
+
+
+enum { RED, BLACK };
+typedef int COLOR;
+
+typedef struct red_black_node {
+	COLOR color;
+	struct red_black_node* right, * left, * parent;
+}*rb_node;
+
+typedef struct Relation_Node {
+	struct red_black_node node;
+
+	//extra data for relation
+	char* key;
+	void* entity;
+
+	relationElementPtr relationList;
+}*relationnode;
+
+typedef struct Entity_Node {
+	struct red_black_node node;
+
+	//extra data for entity
+	char* key;
+
+	out_rel outbound;
+	relationnode inbound;
+
+	relationSummaryPtr summary;
+}*entitynode;
+
+entitynode ROOT;
+rb_node NILL;
+
+void init() {
+	NILL = malloc(sizeof(struct red_black_node));
+	NILL->color = BLACK;
+	NILL->left = NULL;
+	NILL->right = NULL;
 }
 
+void initRBnode(rb_node n) {
+	n->color = RED;
+	n->parent = NILL;
+	n->left = NILL;
+	n->right = NILL;
+}
 
-relationnode treeSuccessorRelation(relationnode root)
-{
-	if (root->right != NILLR)
-		return treeMinimumRelation(root->right);
-	relationnode y = root->parent;
-	while (y != NILLR && root == y->right)
-	{
-		root = y;
+bool isNill(void* n) {
+	return (rb_node)n == NILL;
+}
+void* getNill() {
+	return NILL;
+}
+
+void* up(void* n) {
+	return ((rb_node)n)->parent;
+}
+void* left(void* n) {
+	return ((rb_node)n)->left;
+}
+void* right(void* n) {
+	return ((rb_node)n)->right;
+}
+
+void* treeSearch(void* n, char* key, int (*cmp)(void*, char*)) {
+	while (!isNill(n)) {
+		if ((*cmp)(n, key) < 0)
+			n = ((rb_node)n)->right;
+		else if ((*cmp)(n, key) > 0)
+			n = ((rb_node)n)->left;
+		else
+			return n;
+	}
+	return n;
+}
+
+void inorderTreeWalk(const rb_node n, void (*f)(void*)) {
+	if (!isNill(n)) {
+		inorderTreeWalk(n->left, f);
+		(*f)(n);
+		inorderTreeWalk(n->right, f);
+	}
+}
+
+static void* treeMinimum(rb_node n) {
+	while (!isNill(n->left))
+		n = n->left;
+	return n;
+}
+
+static void* treeSuccessor(rb_node n) {
+	if (!isNill(n->right))
+		return treeMinimum(n->right);
+	rb_node y = n->parent;
+	while (!isNill(y) && n == y->right) {
+		n = y;
 		y = y->parent;
 	}
 	return y;
 }
 
+static void leftRotate(rb_node* root, rb_node node) {
+	rb_node right = node->right;
+	node->right = right->left;
+	if (!isNill(right->left)) {
+		right->left->parent = node;
+	}
+	right->parent = node->parent;
+	if (isNill(node->parent)) {
+		*root = right;
+	}
+	else if (node == node->parent->left) {
+		node->parent->left = right;
+	}
+	else {
+		node->parent->right = right;
+	}
 
-void rbInsertRelation(relationnode* root, entitynode orig, relationSummary summary) {
+	right->left = node;
+	node->parent = right;
+}
 
-	relationnode z, x, y;
-	x = *root;
-	y = NILLR;
 
-	while (x != NILLR) {
-		y = x;
-		if (strcmp(orig->key, ((entitynode)x->entityPointer)->key) < 0)
-			x = x->left;
-		else if (strcmp(orig->key, ((entitynode)x->entityPointer)->key) > 0)
-			x = x->right;
-		else
-		{
-			relationlist curr = x->relationList, last = NULL;
-			while (curr != NULL)
-			{
+static void rightRotate(rb_node* root, rb_node node) {
+	rb_node left = node->left;
+	node->left = left->right;
+	if (!isNill(left->right)) {
+		left->right->parent = node;
+	}
+
+	left->parent = node->parent;
+	if (isNill(node->parent)) {
+		*root = left;
+	}
+	else if (node == node->parent->right) {
+		node->parent->right = left;
+	}
+	else {
+		node->parent->left = left;
+	}
+
+	left->right = node;
+	node->parent = left;
+}
+
+static void insertFixUp(rb_node* root, rb_node x) {
+	while (x != *root && x->parent->color == RED) {
+		rb_node x_parent = x->parent;
+		if (x_parent->color == RED) {
+			if (x_parent == x_parent->parent->left) {
+				rb_node y = x_parent->parent->right;
+				if (y->color == RED) {
+					x_parent->color = BLACK;
+					y->color = BLACK;
+					x_parent->parent->color = RED;
+					x = x_parent->parent;
+				}
+				else {
+					if (x == x_parent->right) {
+						x = x_parent;
+						leftRotate(root, x);
+						x_parent = x->parent;
+					}
+					x_parent->color = BLACK;
+					x_parent->parent->color = RED;
+					rightRotate(root, x_parent->parent);
+				}
+			}
+			else {
+				rb_node y = x_parent->parent->left;
+				if (y->color == RED) {
+					x_parent->color = BLACK;
+					y->color = BLACK;
+					x_parent->parent->color = RED;
+					x = x_parent->parent;
+				}
+				else {
+					if (x == x_parent->left) {
+						x = x_parent;
+						rightRotate(root, x);
+						x_parent = x->parent;
+					}
+					x_parent->color = BLACK;
+					x_parent->parent->color = RED;
+					leftRotate(root, x_parent->parent);
+				}
+			}
+		}
+	}
+	(*root)->color = BLACK;
+}
+
+void insertNode(rb_node* root, rb_node parent, rb_node node, int (*cmp)(void*, void*)) {
+
+	if (isNill(parent))
+		* root = node;
+	else if ((*cmp)(parent, node) > 0)
+		parent->left = node;
+	else
+		parent->right = node;
+
+	insertFixUp(root, node);
+}
+
+static void deleteFixUp(rb_node* root, rb_node x, rb_node x_parent) {
+	while (x != *root && x->color == BLACK) {
+		rb_node y;
+		if (x == x_parent->left) {
+			y = x_parent->right;
+			if (y->color == RED) {
+				y->color = BLACK;
+				x_parent->color = RED;
+				leftRotate(root, x_parent);
+				y = x_parent->right;
+			}
+			if (y->left->color == BLACK && y->right->color == BLACK) {
+				y->color = RED;
+				x = x_parent;
+				x_parent = x_parent->parent;
+			}
+			else {
+				if (y->right->color == BLACK) {
+					y->left->color = BLACK;
+					y->color = RED;
+					rightRotate(root, y);
+					y = x_parent->right;
+				}
+				y->color = x_parent->color;
+				x_parent->color = BLACK;
+				y->right->color = BLACK;
+				leftRotate(root, x_parent);
+				x = *root;
+			}
+		}
+		else {
+			y = x_parent->left;
+			if (y->color == RED) {
+				y->color = BLACK;
+				x_parent->color = RED;
+				rightRotate(root, x_parent);
+				y = x_parent->left;
+			}
+			if (y->left->color == BLACK && y->right->color == BLACK) {
+				y->color = RED;
+				x = x_parent;
+				x_parent = x_parent->parent;
+			}
+			else {
+				if (y->left->color == BLACK) {
+					y->right->color = BLACK;
+					y->color = RED;
+					leftRotate(root, y);
+					y = x_parent->left;
+				}
+				y->color = x_parent->color;
+				x_parent->color = BLACK;
+				y->left->color = BLACK;
+				rightRotate(root, x_parent);
+				x = *root;
+			}
+		}
+	}
+	x->color = BLACK;
+}
+
+static void chgParentPtr(rb_node* root, rb_node parent, rb_node old, rb_node new) {
+	if (isNill(parent)) {
+		if (*root == old)* root = new;
+		return;
+	}
+
+	if (parent->left == old) parent->left = new;
+	if (parent->right == old) parent->right = new;
+}
+static void chgChildPtr(rb_node child, rb_node old, rb_node new) {
+	if (isNill(child)) return;
+
+	if (child->parent == old) child->parent = new;
+}
+
+static void swapPtr(rb_node* x, rb_node* y) {
+	rb_node t = *x; *x = *y; *y = t;
+}
+static void swapColor(rb_node x, rb_node y) {
+	COLOR t = x->color; x->color = y->color; y->color = t;
+}
+
+void* deleteNode(rb_node* root, rb_node z) {
+	rb_node y, x;
+
+	if (isNill(z->left) || isNill(z->right))
+		y = z;
+	else {
+		y = treeSuccessor(z);
+		//equivalent of copying the value, but here we don't know the content of the node
+		//but just the pointers, so we swap the two nodes
+
+		//color depends on the position of the node
+		swapColor(y, z);
+
+		//x & y parents will point to the respective swapped child
+		chgParentPtr(root, z->parent, z, y);
+		if (z->right != y)
+			chgParentPtr(root, y->parent, y, z);
+
+		//as well their children will change parents
+		chgChildPtr(y->left, y, z);
+		chgChildPtr(y->right, y, z);
+		chgChildPtr(z->left, z, y);
+		if (z->right != y)
+			chgChildPtr(z->right, z, y);
+
+		//if y is the right child of x, we did not change the pointer, so we do it now
+		if (z->right == y) {
+			z->right = z;
+			y->parent = y;
+		}
+
+		//swap internal node pointers
+		swapPtr(&z->parent, &y->parent);
+		swapPtr(&z->left, &y->left);
+		swapPtr(&z->right, &y->right);
+
+		//swap the pointers so that y is the one to be deleted
+		swapPtr(&z, &y);
+	}
+
+	if (!isNill(y->left))
+		x = y->left;
+	else
+		x = y->right;
+
+	if (!isNill(x))
+		x->parent = y->parent;
+
+	if (isNill(y->parent))
+		* root = x;
+	else if (y == y->parent->left)
+		y->parent->left = x;
+	else
+		y->parent->right = x;
+
+	if (y->color == BLACK)
+		deleteFixUp(root, x, y->parent);
+
+	//unlink completely
+	y->parent = getNill();
+	y->left = getNill();
+	y->right = getNill();
+	y->color = BLACK;
+	return y;
+}
+
+
+
+// --------------------------------------------------------------------------------------- RELATION TREE
+
+
+
+int relationNodeChar_cmp(void* node, char* key) {
+	return strcmp(((relationnode)node)->key, key);
+}
+
+int relation2relation_cmp(void* node1, void* node2) {
+	return strcmp(((relationnode)node1)->key, ((relationnode)node2)->key);
+}
+
+void insertRelation(entitynode dest, entitynode orig, relationSummaryPtr summary) {
+
+	relationnode node = dest->inbound, parent = getNill();
+
+	while (!isNill(node)) {
+		parent = node;
+		if (strcmp(orig->key, node->key) < 0)
+			node = left(node);
+		else if (strcmp(orig->key, node->key) > 0)
+			node = right(node);
+		else {
+			relationElementPtr curr = node->relationList, prec = NULL;
+			while (curr != NULL) {
 				if (curr->summaryPointer == summary)
 					return;
-				last = curr;
+				prec = curr;
 				curr = curr->next;
 			}
 
-			relationlist relation = (relationlist)malloc(sizeof(struct Relation_List));
+			relationElementPtr relation = (relationElementPtr)malloc(sizeof(struct relation_element));
 			relation->next = NULL;
 			relation->summaryPointer = summary;
-			last->next = relation;
+			prec->next = relation;
 			summary->count++;
-			
-			
+
+			challengeMaximus(summary->count);
+			return;
 		}
 	}
-	 
-	z = (relationnode)malloc(sizeof(struct Relation_Node));
-	z->entityPointer = orig;
-	relationlist relation = (relationlist)malloc(sizeof(struct Relation_List));
+
+	relationnode z = malloc(sizeof(struct Relation_Node));
+	initRBnode(&z->node);
+
+	z->key = orig->key;
+	z->entity = orig;
+	relationElementPtr relation = (relationElementPtr)malloc(sizeof(struct relation_element));
 	relation->next = NULL;
 	relation->summaryPointer = summary;
 	z->relationList = relation;
-	z->parent = y;
+	z->node.parent = &parent->node;
 	summary->count++;
 
-	if (y == NILLR) {
-		*root = z;
-	}
-	else if (strcmp(((entitynode)z->entityPointer)->key, ((entitynode)y->entityPointer)->key) < 0) {
-		y->left = z;
-	}
-	else {
-		y->right = z;
-	}
-	z->color = RED;
-	z->left = NILLR;
-	z->right = NILLR;
-	rbInsertFixUpRelation(root, z);
-}
+	insertNode(&dest->inbound, &parent->node, &z->node, relation2relation_cmp);
 
-void rbInsertFixUpRelation(relationnode* root, relationnode z) {
+	challengeMaximus(summary->count);
 
-	if (z == *root)
-		(*root)->color = BLACK;
-
-	else
-	{
-		relationnode x;
-		x = z->parent;
-		if (x->color == RED)
-		{
-			if (x == x->parent->left)
-			{
-				relationnode y = x->parent->right;
-				if (y->color == RED)
-				{
-					x->color = BLACK;
-					y->color = BLACK;
-					x->parent->color = RED;
-					rbInsertFixUpRelation(root, x->parent);
-				}
-				else
-				{
-
-					if (z == x->right)
-					{
-						z = x;
-						leftRotateRelation(root, z);
-						x = z->parent;
-					}
-					x->color = BLACK;
-					x->parent->color = RED;
-					rightRotateRelation(root, x->parent);
-				}
-			}
-			else
-			{
-				relationnode y = x->parent->left;
-				if (y->color == RED)
-				{
-					x->color = BLACK;
-					y->color = BLACK;
-					x->parent->color = RED;
-					rbInsertFixUpRelation(root, x->parent);
-				}
-				else
-				{
-					if (z == x->left)
-					{
-						z = x;
-						rightRotateRelation(root, z);
-						x = z->parent;
-					}
-					x->color = BLACK;
-					x->parent->color = RED;
-					leftRotateRelation(root, x->parent);
-				}
-			}
-		}
+	if (dest != orig) {
+		//store the new relation into the outbound array of origin
+		out_rel new = newOutboundRelation(z, dest);
+		addOutboundRelation(&orig->outbound, new);
 	}
 }
 
-
-void leftRotateRelation(relationnode* root, relationnode x) {
-
-	relationnode y;
-
-	y = x->right;
-	x->right = y->left;
-
-	if (y->left != NILLR) {
-		y->left->parent = x;
-	}
-	y->parent = x->parent;
-	if (x->parent == NILLR) {
-		*root = y;
-	}
-	else if (x == x->parent->left) {
-		x->parent->left = y;
-	}
-	else {
-		x->parent->right = y;
-	}
-
-	y->left = x;
-	x->parent = y;
-}
-
-
-
-void rightRotateRelation(relationnode* root, relationnode x) {
-
-	relationnode y;
-	y = x->left;
-	x->left = y->right;
-	if (y->right != NILLR) {
-		y->right->parent = x;
-	}
-
-	y->parent = x->parent;
-	if (x->parent == NILLR) {
-		*root = y;
-	}
-	else if (x == x->parent->right) {
-		x->parent->right = y;
-	}
-	else {
-		x->parent->left = y;
-	}
-
-	y->right = x;
-	x->parent = y;
-
-}
-
-void rbDeleteRelation(relationnode* root, char* key, relationSummary summary)
-{
-	relationnode z = treeSearchRelation(*root, key);
-	if (z == NILLR)
-	{
-		return;
-	}
-		
-	relationlist tmp = z->relationList, prev = NULL;
+relationnode deleteRelation2(relationnode* root, relationnode z, relationSummaryPtr summary) {
+	relationElementPtr tmp = z->relationList, prev = NULL;
 
 	if (summary != NULL) {
 		while (tmp != NULL) {
@@ -403,10 +680,18 @@ void rbDeleteRelation(relationnode* root, char* key, relationSummary summary)
 				if (prev == NULL)
 					z->relationList = tmp->next;
 				else
-					prev->next= tmp->next;
+					prev->next = tmp->next;
+
+				setCurr(summary->rel);
+				if (isMax(summary->count))
+					delNode();
+
+				if (isCurrMaxDepleted()) {
+					//my report summary has at least a false max, force the complete recalculation
+					setRecalcFlag(true);
+				}
 
 				summary->count--;
-			
 				free(tmp);
 				break;
 			}
@@ -418,497 +703,255 @@ void rbDeleteRelation(relationnode* root, char* key, relationSummary summary)
 	else {
 		//cycle all relations and update the main summary while cleaning up memory
 		while (z->relationList != NULL) {
+			setCurr(z->relationList->summaryPointer->rel);
+			if (isMax(z->relationList->summaryPointer->count))
+				delNode();
 			z->relationList->summaryPointer->count--;
-			relationlist tmp = z->relationList;
+			if (isCurrMaxDepleted()) {
+				setRecalcFlag(true);
+			}
+			relationElementPtr tmp = z->relationList;
 			z->relationList = z->relationList->next;
 			free(tmp);
 		}
-		
 	}
 	if (z->relationList == NULL) {
 		//a node with empty relation list does not need to be kept in memory
-		relationnode y, x;
-
-		if (z->left == NILLR || z->right == NILLR)
-			y = z;
-		else
-			y = treeSuccessorRelation(z);
-		if (y->left != NILLR)
-			x = y->left;
-		else
-			x = y->right;
-		x->parent = y->parent;
-		if (y->parent == NILLR)
-			* root = x;
-		else if (y == y->parent->left)
-			y->parent->left = x;
-		else
-			y->parent->right = x;
-		if (y != z)
-		{
-			z->entityPointer = y->entityPointer;
-			z->relationList = y->relationList;
-		}
-		if (y->color == BLACK)
-			rbDeleteFixUpRelation(root, x);
+		return deleteNode(root, &z->node);
 	}
+	return getNill();
 }
 
-
-void rbDeleteFixUpRelation(relationnode* root, relationnode n)
+void deleteRelation(relationnode* root, entitynode orig, relationSummaryPtr summary)
 {
-	if (n->color == RED || n->parent == NILLR)
-		n->color = BLACK;
-	else if (n == n->parent->left)
-	{
-		relationnode w = n->parent->right;
-		if (w->color == RED)
-		{
-			w->color = BLACK;
-			n->parent->color = RED;
-			leftRotateRelation(root, n->parent);
-			w = n->parent->right;
-		}
-		if (w->left->color == BLACK && w->right->color == BLACK)
-		{
-			w->color = RED;
-			rbDeleteFixUpRelation(root, n->parent);
-		}
-		else
-		{
-			if (w->right->color == BLACK)
-			{
-				w->left->color = BLACK;
-				w->color = RED;
-				rightRotateRelation(root, w);
-				w = n->parent->right;
-
-			}
-			w->color = n->parent->color;
-			n->parent->color = BLACK;
-			w->right->color = BLACK;
-			leftRotateRelation(root, n->parent);
-		}
-	}
-	else
-	{
-		relationnode w = n->parent->left;
-		if (w->color == RED)
-		{
-			w->color = BLACK;
-			n->parent->color = RED;
-			rightRotateRelation(root, n->parent);
-			w = n->parent->left;
-		}
-		if (w->left->color == BLACK && w->right->color == BLACK)
-		{
-			w->color = RED;
-			rbDeleteFixUpRelation(root, n->parent);
-		}
-		else
-		{
-			if (w->left->color == BLACK)
-			{
-				w->right->color = BLACK;
-				w->color = RED;
-				leftRotateRelation(root, w);
-				w = n->parent->left;
-
-			}
-			w->color = n->parent->color;
-			n->parent->color = BLACK;
-			w->left->color = BLACK;
-			rightRotateRelation(root, n->parent);
-		}
-
-	}
-}
-
-
-entitynode treeSuccessor(entitynode);
-entitynode treeMinimum(entitynode);
-void inorderTreeWalk(entitynode, int);
-void rbInsert(char*);
-void rbInsertFixUp(entitynode);
-void rbDelete(char*);
-void rbDeleteFixUp(entitynode);
-void rightRotate(entitynode);
-void leftRotate(entitynode);
-entitynode treeSearch(entitynode, char*);
-void destroyTree(entitynode);
-void destroyTreeRelation(relationnode);
-
-
-entitynode treeSearch(entitynode x, char* key)
-{
-	if (x == NILL || strcmp(key, x->key) == 0)
-		return x;
-	if (strcmp(key, x->key) < 0)
-		return treeSearch(x->left, key);
-	else
-		return treeSearch(x->right, key);
-	return x;
-
-}
-
-
-void inorderTreeWalk(entitynode n, int h)
-{
-	if (n != NILL)
-	{
-		inorderTreeWalk(n->left, h + 1);
-		inorderTreeWalkRelation(n->root);
-		printf("%s\n", n->key);
-		inorderTreeWalk(n->right, h + 1);
-	}
-}
-
-
-entitynode treeMinimum(entitynode n)
-{
-	while (n->left != NILL)
-	{
-		n = n->left;
-	}
-	return n;
-}
-
-
-entitynode treeSuccessor(entitynode n)
-{
-	if (n->right != NILL)
-		return treeMinimum(n->right);
-	entitynode y = n->parent;
-	while (y != NILL && n == y->right)
-	{
-		n = y;
-		y = y->parent;
-	}
-	return y;
-}
-
-void rbInsert(char* key)
-{
-	entitynode z, x, y;
-	z = malloc(sizeof(struct Entity_Node));
-	z->key = (char*)malloc(sizeof(char) * (strlen(key) + 1));
-	strcpy(z->key, key);
-	z->summary = NULL;
-
-	z->root = malloc(sizeof(struct Relation_Node));
-
-	x = ROOT;
-	y = NILL;
-	z->root = NILLR;
-
-	while (x != NILL) {
-		y = x;
-		if (strcmp(z->key, x->key) < 0) {
-			x = x->left;
-		}
-		else {
-			x = x->right;
-		}
-	}
-	z->parent = y;
-
-	if (y == NILL) {
-		ROOT = z;
-	}
-	else if (strcmp(z->key, y->key) < 0) {
-		y->left = z;
-	}
-	else {
-		y->right = z;
-	}
-	z->color = RED;
-	z->left = NILL;
-	z->right = NILL;
-	rbInsertFixUp(z);
-
-}
-
-void rbInsertFixUp(entitynode z) {
-
-	if (z == ROOT)
-		ROOT->color = BLACK;
-
-	else
-	{
-		entitynode x;
-		x = z->parent;
-		if (x->color == RED)
-		{
-			if (x == x->parent->left)
-			{
-				entitynode y = x->parent->right;
-				if (y->color == RED)
-				{
-					x->color = BLACK;
-					y->color = BLACK;
-					x->parent->color = RED;
-					rbInsertFixUp(x->parent);
-				}
-				else
-				{
-					if (z == x->right)
-					{
-						z = x;
-						leftRotate(z);
-						x = z->parent;
-					}
-					x->color = BLACK;
-					x->parent->color = RED;
-					rightRotate(x->parent);
-				}
-			}
-			else
-			{
-				entitynode y = x->parent->left;
-				if (y->color == RED)
-				{
-					x->color = BLACK;
-					y->color = BLACK;
-					x->parent->color = RED;
-					rbInsertFixUp(x->parent);
-				}
-				else
-				{
-					if (z == x->left)
-					{
-						z = x;
-						rightRotate(z);
-						x = z->parent;
-					}
-					x->color = BLACK;
-					x->parent->color = RED;
-					leftRotate(x->parent);
-				}
-			}
-		}
-	}
-}
-
-
-void leftRotate(entitynode x) {
-
-	entitynode y;
-
-	y = x->right;
-	x->right = y->left;
-
-	if (y->left != NILL) {
-		y->left->parent = x;
-	}
-	y->parent = x->parent;
-	if (x->parent == NILL) {
-		ROOT = y;
-	}
-	else if (x == x->parent->left) {
-		x->parent->left = y;
-	}
-	else {
-		x->parent->right = y;
-	}
-
-	y->left = x;
-	x->parent = y;
-
-}
-
-
-void rightRotate(entitynode x) {
-
-	entitynode y;
-	y = x->left;
-	x->left = y->right;
-	if (y->right != NILL) {
-		y->right->parent = x;
-	}
-
-	y->parent = x->parent;
-	if (x->parent == NILL) {
-		ROOT = y;
-	}
-	else if (x == x->parent->right) {
-		x->parent->right = y;
-	}
-	else {
-		x->parent->left = y;
-	}
-
-	y->right = x;
-	x->parent = y;
-}
-
-void relationCleanup(entitynode n, char* key) {
-	if (n != NILL)
-	{
-		relationCleanup(n->left, key);
-		rbDeleteRelation(&n->root, key, NULL);
-		relationCleanup(n->right, key);
-	}
-}
-
-void rbDelete(char* key)
-{
-
-	entitynode z = treeSearch(ROOT, key);
-	if (z == NILL)
+	relationnode z = treeSearch(*root, orig->key, relationNodeChar_cmp);
+	if (isNill(z))
 		return;
-	relationCleanup(ROOT, key);
 
+	relationnode deleted = deleteRelation2(root, z, summary);
 
-	entitynode y, x;
+	if (!isNill(deleted)) {
+		delAllOutboundRelationByRelation(&orig->outbound, deleted);
+		if (deleted == *root)
+			* root = getNill();
 
-	if (z->left == NILL || z->right == NILL)
-		y = z;
-	else
-		y = treeSuccessor(z);
-	if (y->left != NILL)
-		x = y->left;
-	else
-		x = y->right;
-	x->parent = y->parent;
-	if (y->parent == NILL)
-		ROOT = x;
-	else if (y == y->parent->left)
-		y->parent->left = x;
-	else
-		y->parent->right = x;
-	if (y != z) {
-		strcpy(z->key, y->key);
-		z->summary = y->summary;
+		free(deleted);
 	}
-
-	if (y->color == BLACK)
-		rbDeleteFixUp(x);
-
 }
 
-void rbDeleteFixUp(entitynode n)
-{
-	if (n->color == RED || n->parent == NILL)
-		n->color = BLACK;
-	else if (n == n->parent->left)
-	{
-		entitynode w = n->parent->right;
-		if (w->color == RED)
-		{
-			w->color = BLACK;
-			n->parent->color = RED;
-			leftRotate(n->parent);
-			w = n->parent->right;
-		}
-		if (w->left->color == BLACK && w->right->color == BLACK)
-		{
-			w->color = RED;
-			rbDeleteFixUp(n->parent);
-		}
-		else
-		{
-			if (w->right->color == BLACK)
-			{
-				w->left->color = BLACK;
-				w->color = RED;
-				rightRotate(w);
-				w = n->parent->right;
-
-			}
-			w->color = n->parent->color;
-			n->parent->color = BLACK;
-			w->right->color = BLACK;
-			leftRotate(n->parent);
-		}
-
+void freeRelationList(relationElementPtr list) {
+	while (list != NULL) {
+		relationElementPtr tmp = list;
+		list = list->next;
+		free(tmp);
 	}
-	else
-	{
-		entitynode w = n->parent->left;
-		if (w->color == RED)
-		{
-			w->color = BLACK;
-			n->parent->color = RED;
-			rightRotate(n->parent);
-			w = n->parent->left;
-		}
-		if (w->left->color == BLACK && w->right->color == BLACK)
-		{
-			w->color = RED;
-			rbDeleteFixUp(n->parent);
-		}
-		else
-		{
-			if (w->left->color == BLACK)
-			{
-				w->right->color = BLACK;
-				w->color = RED;
-				leftRotate(w);
-				w = n->parent->left;
+}
 
-			}
-			w->color = n->parent->color;
-			n->parent->color = BLACK;
-			w->left->color = BLACK;
-			rightRotate(n->parent);
-		}
-
-	}
+void freeRelationNode(relationnode node) {
+	free(node);
 }
 
 void destroyTreeRelation(relationnode root)
 {
-	if (root == NILLR)
+	if (isNill(root))
 		return;
-	destroyTreeRelation(root->left);
-	free(root->entityPointer);
-	free(root->relationList);
-	destroyTreeRelation(root->right);
-	free(root);
-	
 
+	destroyTreeRelation(left(root));
+	freeRelationList(root->relationList);
+	destroyTreeRelation(right(root));
+
+	freeRelationNode(root);
 }
 
-void destroyTree(entitynode tree)
+
+
+// --------------------------------------------------------------------------------------- ENTITY TREE
+
+
+
+int entitycmp(void* node, char* key) {
+	return strcmp(((entitynode)node)->key, key);
+}
+
+int entity2entity_cmp(void* node1, void* node2) {
+	return strcmp(((entitynode)node1)->key, ((entitynode)node2)->key);
+}
+
+void insertEntity(entitynode* root, char* key) {
+	entitynode node = *root, parent = getNill();
+	while (!isNill(node)) {
+		parent = node;
+		if (strcmp(key, node->key) < 0) {
+			node = left(node);
+		}
+		else if (strcmp(key, node->key) > 0) {
+			node = right(node);
+		}
+		else {
+			//entity already existing
+			return;
+		}
+	}
+	entitynode z = malloc(sizeof(struct Entity_Node));
+	initRBnode(&z->node);
+
+	z->key = malloc(strlen(key) + 1);
+	strcpy(z->key, key); z->key[strlen(key)] = 0;
+	z->summary = NULL;
+	z->inbound = getNill();
+	z->outbound = NULL;
+
+	z->node.parent = &parent->node;
+	insertNode(root, &parent->node, &z->node, entity2entity_cmp);
+}
+
+void relationCleanup(entitynode n, char* key) {
+	while (n->outbound != NULL) {
+		out_rel curr = n->outbound;
+		entitynode e = (entitynode)curr->entity;
+		relationnode r = (relationnode)curr->relation;
+
+		relationnode deleted = deleteRelation2(&e->inbound, r, NULL);
+		if (!isNill(deleted))
+			free(deleted);
+
+		n->outbound = n->outbound->next;
+		free(curr);
+	}
+}
+
+void inboundRelationCleanup(relationnode root, entitynode z)
 {
-	if (tree == NILL)
+	if (isNill(root))
 		return;
-	
-	destroyTree(tree->left);
-	destroyTreeRelation(tree->root);
-	free(tree->key);
-	free(tree->summary);
-	 
-	destroyTree(tree->right);
-	free(tree);
+
+	inboundRelationCleanup(left(root), z);
+
+	entitynode e = (entitynode)root->entity;
+
+	delAllOutboundRelationByEntity(&e->outbound, z);
+	freeRelationList(root->relationList);
+
+	inboundRelationCleanup(right(root), z);
+
+	freeRelationNode(root);
+}
+
+void deleteEntity(entitynode* root, char* key) {
+	entitynode z = treeSearch(*root, key, entitycmp);
+	if (isNill(z))
+		return;
+
+	entitynode deleted = deleteNode(root, &z->node);
+	//clean all outbound relations
+	relationCleanup(deleted, key);
+
+	//clean all inbound relations (outbounds for the others)
+	inboundRelationCleanup(deleted->inbound, z);
+
+	//fix values with my summary!!!
+	while (deleted->summary != NULL) {
+		setCurr(deleted->summary->rel);
+		if (isMax(deleted->summary->count))
+			delNode();
+		if (isCurrMaxDepleted()) {
+			setRecalcFlag(true);
+		}
+		relationSummaryPtr tmp = deleted->summary;
+		deleted->summary = deleted->summary->next;
+		free(tmp);
+	}
+
+	//destroyTreeRelation(deleted->root);
+	//freeSummary(deleted->summary);
+	free(deleted->key);
+	free(deleted);
 }
 
 
 
-/////////////////////////////////////MAIN//////////////////////////////////////////
+// --------------------------------------------------------------------------------------- REPORT
+
+
+
+char stampa[ARRAYLENGHT][1500];
+
+void exploreElement2(void* node) {
+	relationSummaryPtr tmp = ((entitynode)node)->summary;
+
+	int pos = 0;
+	while (tmp != NULL) {
+		//both ordered, I can go only forward instead of checking from the beginning
+		while (tmp->rel != getRelationAndSetCurr(pos))
+			pos++;
+
+		if (isMax(tmp->count)) {
+			strcat(stampa[pos], " \"");
+			strcat(stampa[pos], ((entitynode)node)->key);
+			strcat(stampa[pos], "\"");
+		}
+		tmp = tmp->next;
+	}
+}
+
+void printReport(entitynode root) {
+	if (hasChanged()) {
+		//force recalculation of the strings only if there where some real modifications
+		for (int i = 0; i < getLen(); i++) {
+			strcpy(stampa[i], "");
+			strcat(stampa[i], "\"");
+			strcat(stampa[i], getRelationAndSetCurr(i));
+			strcat(stampa[i], "\"");
+		}
+		//reset position
+		getRelationAndSetCurr(0);
+		inorderTreeWalk(&root->node, exploreElement2);
+		setHasChanged(false);
+	}
+
+	bool empty = true;
+	size_t i = 0;
+	while (i < getLen() && getMax(i) == 0)
+		i++;
+
+	if (i < getLen()) {
+		empty = false;
+		printf("%s %zu;", stampa[i], getMax(i));
+		while (++i < getLen()) {
+			if (getMax(i) > 0)
+				printf(" %s %zu;", stampa[i], getMax(i));
+		}
+	}
+	if (empty)
+		printf("none");
+	printf("\n");
+}
+
+
+
+// --------------------------------------------------------------------------------------- MAIN
+
+
+
+void findNewMax(void* n) {
+	relationSummaryPtr tmp = ((entitynode)n)->summary;
+	while (tmp != NULL) {
+		setCurr(tmp->rel);
+		challengeMaximus(tmp->count);
+		tmp = tmp->next;
+	}
+}
 
 int main() {
+	init();
 
-	NILL = malloc(sizeof(struct Entity_Node));
-	NILL->color = BLACK;
-	ROOT = NILL;
-	NILLR = malloc(sizeof(struct Relation_Node));
-	NILLR->color = BLACK;
+	ROOT = getNill();
 
+	char* ent1 = NULL, * ent2 = NULL, * rel = NULL;
+	/*char c[100];*/
 	
-	char c[200];
-	char* id_ent;
-	char* id_orig;
-	char* id_dest;
-	char* id_rel;
-	int cont;
-
-	FILE* fp;
-	fp = fopen("C:\\Users\\DAVO_\\Desktop\\batch1.2.in", "r");
-	while (fgets(c, sizeof c, fp) != NULL)
-	{
-		c[strlen(c) - 1] = 0;
-		/*char* c = malloc(1);
+	while (true) {
+		char* c = malloc(1);
 		int character;
 		int i = 0;
 		while ((character = getchar()) != '\n' && character != EOF)
@@ -916,224 +959,77 @@ int main() {
 			c[i++] = character;
 			c = realloc(c, i + 1);
 		}
-		c[i] = '\0';*/
+		c[i] = '\0';
+
 
 		//ADDENT
-		if (strncmp(c, "addent", 6) == 0)
-		{
-
-			id_ent = (char*)malloc((strlen(c) - 8) * sizeof(char));
-			strncpy(id_ent, c + 8, strlen(c) - 9);
-			id_ent[strlen(c) - 9] = 0;
-
-
-			if (treeSearch(ROOT, id_ent) == NILL)
-			{
-				rbInsert(id_ent);
-			}
-
-			free(id_ent);
-			id_ent = NULL;
+		if (strncmp(c, "addent", 6) == 0) {
+			ent1 = strtok(c + 7, "\"");
+			insertEntity(&ROOT, ent1);
 		}
 
 		//DELENT
-		if (strncmp(c, "delent", 6) == 0)
-		{
-			id_ent = (char*)malloc((strlen(c) - 8) * sizeof(char));
-			strncpy(id_ent, c + 8, strlen(c) - 9);
-			id_ent[strlen(c) - 9] = 0;
-			rbDelete(id_ent);
+		if (strncmp(c, "delent", 6) == 0) {
+			ent1 = strtok(c + 7, "\"");
+			deleteEntity(&ROOT, ent1);
 
-
-			free(id_ent);
-			id_ent = NULL;
+			if (getRecalcFlag()) {
+				reset();
+				inorderTreeWalk(&ROOT->node, findNewMax);
+				setRecalcFlag(false);
+			}
 		}
 
 		//ADDREL
+		if (strncmp(c, "addrel", 6) == 0) {
+			ent1 = strtok(c + 7, "\"");
+			ent2 = strtok(NULL, "\" \"");
+			rel = strtok(NULL, "\" \"");
 
-		if (strncmp(c, "addrel", 6) == 0)
-		{
-			id_dest = "";
-			id_orig = "";
-			id_rel = "";
-			cont = 0;
-
-			char* cmdstring;
-			cmdstring = strtok(c, "\"");
-			while (cmdstring != NULL)
-			{
-				switch (cont)
-				{
-				case 1:
-					id_orig = (char*)malloc((strlen(cmdstring) + 1) * sizeof(char));
-					strcpy(id_orig, cmdstring);
-					id_orig[strlen(cmdstring)] = 0;
-					break;
-
-				case 3:
-					id_dest = (char*)malloc((strlen(cmdstring) + 1) * sizeof(char));
-					strcpy(id_dest, cmdstring);
-					id_dest[strlen(cmdstring)] = 0;
-					break;
-				case 5:
-					id_rel = (char*)malloc((strlen(cmdstring) + 1) * sizeof(char));
-					strcpy(id_rel, cmdstring);
-					id_rel[strlen(cmdstring)] = 0;
-					break;
-				}
-				cmdstring = strtok(NULL, "\"");
-				cont++;
-
+			char* relkey = addRelation(rel);
+			entitynode n_orig = treeSearch(ROOT, ent1, entitycmp);
+			entitynode n_dest = treeSearch(ROOT, ent2, entitycmp);
+			if (!isNill(n_orig) && !isNill(n_dest)) {
+				relationSummaryPtr summary = getSummary(&n_dest->summary, relkey);
+				insertRelation(n_dest, n_orig, summary);
 			}
-
-			entitynode n_orig = NILL, n_dest = NILL;
-
-			n_orig = treeSearch(ROOT, id_orig);
-			n_dest = treeSearch(ROOT, id_dest);
-			if (n_orig != NILL && n_dest != NILL)
-			{
-				relationSummary summary = getSummary(&n_dest->summary, id_rel);
-				rbInsertRelation(&n_dest->root, n_orig, summary);
-			}
-			free(id_orig);
-			id_orig = NULL;
-			free(id_dest);
-			id_dest = NULL;
-			free(id_rel);
-			id_rel = NULL;
 		}
 
 		//DELREL
 		if (strncmp(c, "delrel", 6) == 0)
 		{
-			id_dest = "";
-			id_orig = "";
-			id_rel = "";
-			cont = 0;
+			ent1 = strtok(c + 7, "\"");
+			ent2 = strtok(NULL, "\" \"");
+			rel = strtok(NULL, "\" \"");
 
-			char* cmdstring;
-			cmdstring = strtok(c, "\"");
-			while (cmdstring != NULL)
-			{
-				switch (cont)
-				{
-				case 1:
-					id_orig = (char*)malloc((strlen(cmdstring) + 1) * sizeof(char));
-					strcpy(id_orig, cmdstring);
-					id_orig[strlen(cmdstring)] = 0;
-					break;
+			entitynode n_orig = (entitynode)treeSearch(ROOT, ent1, entitycmp);
+			entitynode n_dest = (entitynode)treeSearch(ROOT, ent2, entitycmp);
 
-				case 3:
-					id_dest = (char*)malloc((strlen(cmdstring) + 1) * sizeof(char));
-					strcpy(id_dest, cmdstring);
-					id_dest[strlen(cmdstring)] = 0;
-					break;
-				case 5:
-					id_rel = (char*)malloc((strlen(cmdstring) + 1) * sizeof(char));
-					strcpy(id_rel, cmdstring);
-					id_rel[strlen(cmdstring)] = 0;
-					break;
+			char* relkey = addRelation(rel);
+			if (!isNill(n_orig) && !isNill(n_dest)) {
+				relationSummaryPtr summary = getSummary(&n_dest->summary, relkey);
+				deleteRelation(&n_dest->inbound, n_orig, summary);
+
+				if (getRecalcFlag()) {
+					//start recalc of all maxima
+					reset();
+					inorderTreeWalk(&ROOT->node, findNewMax);
+					setRecalcFlag(false);
 				}
-				cmdstring = strtok(NULL, "\"");
-				cont++;
-
 			}
-
-			entitynode n_orig = NILL, n_dest = NILL;
-
-			n_orig = (entitynode)treeSearch(ROOT, id_orig);
-			n_dest = (entitynode)treeSearch(ROOT, id_dest);
-
-			if (n_orig != NILL && n_dest != NILL)
-			{
-				relationSummary summary = getSummary(&n_dest->summary, id_rel);
-				rbDeleteRelation(&n_dest->root, id_orig, summary);
-			}
-
-			free(id_orig);
-			id_orig = NULL;
-			free(id_dest);
-			id_dest = NULL;
-			free(id_rel);
-			id_rel = NULL;
 		}
 
 		//REPORT
-		if (strcmp(c,"report") == 0)
-		{		 
-			struct Report_Summary reportlist[100];
-			for (int j = 0;j < 100;j++)
-			{
-				reportlist[j].summaryPointer = NULL;
-				for (int j1 = 0;j1 < 100;j1++)
-				{
-					strcpy(reportlist[j].entityName[j1], "");
-				}
-			}
-
-
-			inorderTreeSummary(ROOT,reportlist);
-			
-			struct Report_Summary tmp;
-			 
-			
-			int j, f=0; 
-			while (reportlist[f].summaryPointer != NULL)
-			{
-				tmp = reportlist[f];
-				j = f - 1;
-				while (j >= 0 && strcmp(reportlist[j].summaryPointer->relation, tmp.summaryPointer->relation) > 0)
-				{
-					reportlist[j + 1] = reportlist[j];
-			 
-					j--;
-				}
-				reportlist[j + 1] = tmp;
-				f++;
-
-			}
-
-
-			int k = 0;		
-			while (reportlist[k].summaryPointer != NULL)
-			{
-				if (reportlist[k].summaryPointer->count > 0)
-				{
-
-					printf("\"%s\" ", reportlist[k].summaryPointer->relation);
-					int z = 0;
-					while (strlen(reportlist[k].entityName[z]) > 0)
-					{
-						printf("\"%s\" ", reportlist[k].entityName[z]);
-						z++;
-					}
-
-					printf("%d; ", reportlist[k].summaryPointer->count);
-				}
-				k++;
-				
-			}
-			if (k == 0)
-				printf("none");
-
-			printf("\n");
-		  
-
+		if (strcmp(c, "report") == 0) {
+			printReport(ROOT);
 		}
 
 		//END
-		if (strcmp(c,"end") == 0)
-		{
-			/*free(c);*/
+		if (strcmp(c, "end") == 0) {
+			free(c);
 			break;
 		}
-
-		/*free(c);*/
+		free(c);
 	}
-
-	/*destroyTree(ROOT);*/
-	free(NILL);
-	free(NILLR);
-
 	return 0;
 }
