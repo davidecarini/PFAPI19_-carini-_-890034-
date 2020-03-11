@@ -1,92 +1,3 @@
-#include <assert.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-enum { RED, BLACK };
-typedef int COLOR;
-
-typedef struct Relation_Summary {
-	char relation[25];
-	int count;
-	struct Relation_Summary* next;
-}*relationSummary;
-
-typedef struct Relation_List {
-	relationSummary summaryPointer;
-	struct Relation_List* next;
-}*relationlist;
-
-typedef struct Relation_Node {
-	void* entityPointer;
-	COLOR color;
-	struct Relation_Node* right, * left, * parent;
-	relationlist relationList;
-}*relationnode;
-
-typedef struct Entity_Node {
-	char* key;
-	COLOR color;
-	struct Entity_Node* right, * left, * parent;
-	relationnode root;
-	relationSummary summary;
-}*entitynode;
-
-struct Report_Summary {
-	relationSummary summaryPointer;
-	char entityName[100][50];
-};
-
-entitynode NILL, ROOT;
-relationnode NILLR;
-
-
-
-///////////////////////////////////////RELATION/////////////////////////////////////////////
-
-relationnode treeSuccessorRelation(relationnode);
-relationnode treeMinimumRelation(relationnode);
-void rbInsertRelation(relationnode*, entitynode, relationSummary);
-void rbInsertFixUpRelation(relationnode*, relationnode);
-void rbDeleteRelation(relationnode*, char*, relationSummary);
-void rbDeleteFixUpRelation(relationnode*, relationnode);
-void rightRotateRelation(relationnode*, relationnode);
-void leftRotateRelation(relationnode*, relationnode);
-relationnode treeSearchRelation(relationnode, char*);
-relationSummary initNewSummary(char*);
-relationSummary getSummary(relationSummary*, char*);
-void inorderTreeWalkRelation(relationnode);
-void inorderTreeSummary(entitynode,struct Report_Summary[]);
-
-
-void inorderTreeSummary(entitynode root, struct Report_Summary reportlist[])
-{
-	if (root != NILL)
-	{
-		inorderTreeSummary(root->left, reportlist);
-		relationSummary tmp = root->summary;
-		while (tmp != NULL)
-		{
-			bool b = false;
-			int i = 0;
-			while(reportlist[i].summaryPointer!=NULL)
-			{
-				if (strcmp(tmp->relation, reportlist[i].summaryPointer->relation) == 0)
-				{
-					b = true;
-					if (tmp->count > reportlist[i].summaryPointer->count)
-					{
-						(reportlist[i]).summaryPointer = tmp;
-						for (int j = 0;j < 100;j++)
-						{
-							strcpy(reportlist[i].entityName[j] , "");
-						}
-						strcpy(reportlist[i].entityName[0],root->key);
-						break;
-					}
-					else if (tmp->count == reportlist[i].summaryPointer->count)
-					{
 						(reportlist[i]).summaryPointer = tmp;
 						int j = 0;
 
@@ -142,8 +53,6 @@ relationSummary getSummary(relationSummary* head, char* key) {
 		if (strcmp(tmp->relation, key) == 0)
 			return tmp;
 
-		prec = tmp;
-		tmp = tmp->next;
 
 	}
 	
