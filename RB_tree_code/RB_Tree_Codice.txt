@@ -1,0 +1,341 @@
+enum { RED, BLACK };
+typedef int COLOR;
+
+ 
+typedef struct Entity_Node {
+	
+	char* key;
+	COLOR color;
+	struct Entity_Node* right, * left, * parent;
+
+}*entitynode;
+
+entitynode NILL, ROOT;
+
+typedef entitynode* EntityTree;
+
+
+entitynode treeSuccessor(entitynode);
+entitynode treeMinimum(entitynode);
+void inorderTreeWalk(entitynode,int);
+void rbInsert(char*);
+void rbInsertFixUp(entitynode);
+void rbDelete(char*);
+void rbDeleteFixUp(entitynode);
+void rightRotate(entitynode);
+void leftRotate(entitynode);
+entitynode treeSearch(entitynode,char*);
+
+entitynode treeSearch(entitynode x,char* key)
+{
+		if (x == NILL || strcmp( key ,x->key)==0)
+			return x;
+		if (strcmp(key, x->key) < 0)
+			return treeSearch(x->left,key);
+		else
+			return treeSearch(x->right, key);
+		return x;
+
+}
+
+
+void inorderTreeWalk(entitynode n,int h)
+{
+	if (n != NILL)
+	{
+		inorderTreeWalk(n->left,h+1);
+		printf("%s(%s)%d ", n->key, (n->color == BLACK ? "b" : "r"),h);
+		inorderTreeWalk(n->right,h+1);
+	}
+}
+
+
+entitynode treeMinimum(entitynode n)
+{
+	while (n->left != NILL)
+	{
+		n = n->left;
+	}
+	return n;
+}
+
+
+entitynode treeSuccessor(entitynode n)
+{
+	if (n->right != NILL)
+		return treeMinimum(n->right);
+	entitynode y = n->parent;
+	while (y != NILL && n == y->right)
+	{
+		n = y;
+		y = y->parent;
+	}
+	return y;
+}
+
+void rbInsert(char * key)
+{
+	entitynode z,  x,  y;
+	z = malloc(sizeof(struct Entity_Node));
+	z->key = (char*)malloc(sizeof(char) * (strlen(key) + 1));
+	strcpy(z->key, key);
+
+	
+	x = ROOT;
+	y = NILL;
+
+	while (x != NILL) {
+		y = x;
+		if (strcmp(z->key, x->key) < 0) {
+			x = x->left;
+		}
+		else {
+			x = x->right;
+		}
+	}
+	z->parent = y;
+
+	if (y == NILL) {
+		ROOT = z;
+	}
+	else if (strcmp(z->key, y->key) < 0) {
+		y->left = z;
+	}
+	else {
+		y->right = z;
+	}
+	z->color = RED;
+	z->left = NILL;
+	z->right = NILL;
+	rbInsertFixUp(z);
+
+}
+
+void rbInsertFixUp(entitynode z) {
+	
+	if (z == ROOT)
+		ROOT->color = BLACK;
+	
+	else  
+	{
+		entitynode x;
+		 x = z->parent;
+		 if (x->color == RED)
+		 {
+			 if (x == x->parent->left)
+			 {
+				 entitynode y = x->parent->right;
+				 if (y->color == RED)
+				 {
+					 x->color = BLACK;
+					 y->color = BLACK;
+					 x->parent->color = RED;
+					 rbInsertFixUp(x->parent);
+				 }
+				 else
+				 {
+
+					 if (z == x->right)
+					 {
+						 z = x;
+						 leftRotate(z);
+						 x = z->parent;
+					 }
+					 x->color = BLACK;
+					 x->parent->color = RED;
+					 rightRotate(x->parent);
+				 }
+			 }
+			 else
+			 {
+				 entitynode y = x->parent->left;
+				 if (y->color == RED)
+				 {
+					 x->color = BLACK;
+					 y->color = BLACK;
+					 x->parent->color = RED;
+					 rbInsertFixUp(x->parent);
+				 }
+				 else
+				 {
+					 if (z == x->left)
+					 {
+						 z = x;
+						 rightRotate(z);
+						 x = z->parent;
+					 }
+					 x->color = BLACK;
+					 x->parent->color = RED;
+					 leftRotate(x->parent);
+				 }
+
+			 }
+		 }
+			 
+
+	}
+
+
+
+}
+
+
+void leftRotate(entitynode x) {
+
+	entitynode y;
+
+	y = x->right;
+	x->right = y->left;
+
+	if (y->left != NILL) {
+		y->left->parent = x;
+	}
+	y->parent = x->parent;
+	if (x->parent == NILL) {
+		ROOT = y;
+	}
+	else if (x == x->parent->left) {
+		x->parent->left = y;
+	}
+	else {
+		x->parent->right = y;
+	}
+
+	y->left = x;
+	x->parent = y;
+	printf("rotation %s, left\n", x->key);
+}
+
+
+void rightRotate(entitynode x) {
+
+	entitynode y;
+	y = x->left;
+	x->left = y->right;
+	if (y->right != NILL) {
+		y->right->parent = x;
+	}
+ 
+	y->parent = x->parent;
+	if (x->parent == NILL) {
+		ROOT = y;
+	}
+	else if (x == x->parent->right) {
+		x->parent->right = y;
+	}
+	else {
+		x->parent->left = y;
+	}
+ 
+	y->right = x;
+	x->parent = y;
+	printf("rotation %s, right\n",x->key);
+}
+
+void rbDelete(char* key)
+{
+	 
+	entitynode z = treeSearch(ROOT,key);
+	if (z == NILL)
+		return;
+
+	entitynode y,x;
+
+	if (z->left == NILL || z->right == NILL)
+		y = z;
+	else
+		y = treeSuccessor(z);
+	if (y->left != NILL)
+		x = y->left;
+	else
+		x = y->right;
+	x->parent = y->parent;
+	if (y->parent == NILL)
+		ROOT = x;
+	else if (y == y->parent->left)
+		y->parent->left = x;
+	else
+		y->parent->right = x;
+	if (y != z)
+		strcpy(z->key, y->key);
+	 
+	
+	if (y->color == BLACK)
+		rbDeleteFixUp(x);
+
+}
+
+void rbDeleteFixUp(entitynode n)
+{
+ 
+
+	if (n->color == RED || n->parent == NILL)
+		n->color = BLACK;
+	else if (n == n->parent->left)
+	{
+		entitynode w = n->parent->right;
+		if (w->color == RED)
+		{
+			w->color = BLACK;
+			n->parent->color = RED;
+			leftRotate(n->parent);
+			w = n->parent->right;
+		}
+		if (w->left->color == BLACK && w->right->color == BLACK)
+		{
+			w->color = RED;
+			rbDeleteFixUp(n->parent);
+		}
+		else
+		{
+			if (w->right->color == BLACK)
+			{
+				w->left->color = BLACK;
+				w->color = RED;
+				rightRotate(w);
+				w = n->parent->right;
+
+			}
+			w->color = n->parent->color;
+			n->parent->color = BLACK;
+			w->right->color = BLACK;
+			leftRotate(n->parent);
+		}
+		
+	}
+	else
+	{
+		entitynode w = n->parent->left;
+		if (w->color == RED)
+		{
+			w->color = BLACK;
+			n->parent->color = RED;
+			rightRotate(n->parent);
+			w = n->parent->left;
+		}
+		if (w->left->color == BLACK && w->right->color == BLACK)
+		{
+			w->color = RED;
+			rbDeleteFixUp(n->parent);
+		}
+		else
+		{
+			if (w->left->color == BLACK)
+			{
+				w->right->color = BLACK;
+				w->color = RED;
+				leftRotate(w);
+				w = n->parent->left;
+
+			}
+			w->color = n->parent->color;
+			n->parent->color = BLACK;
+
+			w->left->color = BLACK;
+			rightRotate(n->parent);
+		}
+
+	}
+}
+
+ 
